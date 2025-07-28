@@ -93,7 +93,7 @@ ANALYZE public_fdw.<table>;
 
 # Script
 
-**<GitHub repository>**
+**[<GitHub repository>](https://github.com/shshakya/DeltaCompare.git)**
 
 1. Create a VM in the same region (**India Central**)  
 2. Install dependencies:
