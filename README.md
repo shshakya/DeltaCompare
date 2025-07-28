@@ -6,9 +6,9 @@
 2. Create another PITR (**PITR2**) at the time when the replication slot is added back  
 3. Use **Postgres FDW** and **Python scripts** to get the delta between **PITR2** & **PITR1**  
 4. The script will identify **inserts**, **deletes**, and **updates** in the interval and store them in a **delta table** in a format that **Event Hub / Landing Table** can consume  
-    Insert: row exists in PITR2 but not in PITR1
-    Delete: row exists in PITR1 but not in PTR2
-    Update: row exists in both but has differences
+   - Insert: row exists in PITR2 but not in PITR1
+   - Delete: row exists in PITR1 but not in PTR2
+   - Update: row exists in both but has differences
 
 ---
 
