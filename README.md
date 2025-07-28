@@ -118,7 +118,7 @@ pip3 install -r requirements.txt
 ```
 
 5. Ensure the VM can connect to both PostgreSQL servers  
-6. Move code from GitHub repo to VM  
+6. Set PostgreSQL username/passwords and eventhub connections strings in `db_config.json` file
 7. Execute the script:
 
 ```bash
