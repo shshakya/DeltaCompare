@@ -93,10 +93,11 @@ ANALYZE public_fdw.<table>;
 
 # Script
 
-**Clone repository: https://github.com/shshakya/DeltaCompare.git
 
-1. Create a VM in the same region (**India Central**)  
-2. Install dependencies:
+
+1. Create a VM in the same region (**India Central**)
+2. Clone repository
+3. Install dependencies:
 
 ```bash
 pip3 install -r requirements.txt
