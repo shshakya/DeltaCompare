@@ -88,38 +88,6 @@ ANALYZE public_fdw.<table>;
 
 ```
 
-4. Create additional tables:
-
-```sql
--- Temporary staging table
-CREATE UNLOGGED TABLE IF NOT EXISTS staging_data_deltas (
-  table_name text,
-  source text,
-  row_data jsonb
-);
-
--- Final delta table
-CREATE TABLE public.data_deltas (
-  table_name text NULL,
-  source text NULL,
-  row_data jsonb NULL,
-  recorded_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT uniq_delta UNIQUE (table_name, source, row_data)
-);
-```
-
----
-
-## PITR1
-
-Create a table to list schema and table names:
-
-```sql
-CREATE TABLE table_list (
-  schema_name text,
-  table_name text
-);
-```
 
 ---
 
@@ -131,12 +99,8 @@ CREATE TABLE table_list (
 2. Install dependencies:
 
 ```bash
-sudo apt update
-sudo apt install git -y
-sudo apt install python3 --version
-sudo apt install python3-psycopg2-binary
-sudo apt install python3-pandas
-sudo apt install python3-sqlalchemy
+pip3 install -r requirements.txt
+
 ```
 
 3. Ensure the VM can connect to both PostgreSQL servers  
@@ -144,26 +108,8 @@ sudo apt install python3-sqlalchemy
 5. Execute the script:
 
 ```bash
-python3 data_delta.py \
-  --db1 "postgresql://<username>:<Password>@<pitr1>:5432/db1" \
-  --db2 "postgresql://<username>:<Password>@<pitr2>:5432/db1" \
-  --log "postgresql://<username>:<Password>@<pitr2>:5432/db1"
+python3 data_delta.py
 ```
 
-### 🔐 Note on Password Encoding
-
-If your password contains special characters, use URL encoding:
-
-| Character | Encode As |
-|-----------|------------|
-| `@`       | `%40`      |
-| `$`       | `%24`      |
-| `/`       | `%2F`      |
-| `:`       | `%3A`      |
-
-Use Python’s `urllib.parse.quote_plus()` or an online encoder.
-
----
-
 6. The script generates a log file named `datadeltalog_*` in the execution folder  
-7. Once completed, delta records will be available in the `data_deltas` table  
+7. Once completed, delta records will be available in the `event_hub`  
