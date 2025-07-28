@@ -23,6 +23,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
                     handlers=[logging.FileHandler(log_filename), logging.StreamHandler()])
 logging.info(f"Script started on host: {socket.gethostname()}")
 
+# Suppress verbose Azure SDK logs
+logging.getLogger("azure").setLevel(logging.WARNING)
+
 def build_payload(table_name, before, after, op_type):
     return {
         "payload": {
@@ -50,6 +53,10 @@ def send_to_eventhub(table, df):
 
     for _, row in df.iterrows():
         payload = json.dumps(build_payload(table, row.get('before'), row.get('after'), row.get('op')))
+
+        # 🧪 Print payload for testing
+        # print(f"\n--- Payload for table '{table}' ---\n{payload}\n")
+
         try:
             batch.add(EventData(payload))
         except ValueError:
@@ -66,7 +73,7 @@ def get_user_tables(engine):
     query = """
         SELECT tablename AS full_table_name, schemaname
         FROM pg_catalog.pg_tables
-        WHERE (schemaname,tablename) in (select schema_name,table_name from table_list);
+        WHERE (schemaname,tablename) in (select schemaname, tablename from pg_publication_tables);
     """
     df = pd.read_sql(query, engine)
     return list(zip(df['full_table_name'], df['schemaname']))
@@ -78,7 +85,7 @@ def get_primary_key_columns(schema, table):
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
         WHERE i.indrelid = %s::regclass AND i.indisprimary;
     """
-    conn = db1_engine.raw_connection()
+    conn = db2_engine.raw_connection()
     cur = conn.cursor()
     cur.execute(query, (f'{schema}.{table}',))
     pk_cols = [row[0] for row in cur.fetchall()]
@@ -97,8 +104,9 @@ def get_comparable_columns(engine, schema, table, pk_cols):
     params = {'schema': schema, 'table': table}
     params.update({f"pk_{i}": col for i, col in enumerate(pk_cols)})
     with engine.connect() as conn:
-        result = conn.execute(sql, params).mappings().all()
-        return [row['column_name'] for row in result]
+        result = conn.execute(sql, params)
+        rows = result.fetchall()
+        return [row['column_name'] for row in rows]
 
 def build_fdw_delta_query(schema_local, schema_remote, table_name, pk_cols, compare_cols):
     all_cols = pk_cols + compare_cols
@@ -150,7 +158,7 @@ def compare_table_fdw(table_name, schema_local, schema_remote='public_fdw'):
 
 # Run comparisons
 start_time = datetime.now()
-tables = get_user_tables(db1_engine)
+tables = get_user_tables(db2_engine)
 results = {}
 with ThreadPoolExecutor(max_workers=9) as executor:
     future_to_table = {executor.submit(compare_table_fdw, tbl, schema): (schema, tbl) for tbl, schema in tables}
