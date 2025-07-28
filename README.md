@@ -16,11 +16,11 @@
 
 ## PITR2
 
-1. Enable **Postgres FDW extension**  
-2. Execute the following scripts:
+1. Enable **Postgres FDW extension**
+   - Add POSTGRES_FDW to `azure.extensions` server parameter.
+3. Execute the following scripts:
 
 ```sql
--- Add POSTGRES_FDW to `azure.extensions` server parameter.
 -- Create schema
 CREATE SCHEMA public_fdw;
 
