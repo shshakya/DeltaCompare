@@ -33,6 +33,19 @@ OPTIONS (user '<username>', password '<password>');
 
 -- Import foreign schema (repeat for all PITR1 schemas)
 IMPORT FOREIGN SCHEMA <schema> FROM SERVER server1_fdw INTO public_fdw;
+
+-- OR
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT DISTINCT schemaname FROM pg_publication_tables
+  LOOP
+    EXECUTE format('IMPORT FOREIGN SCHEMA %I FROM SERVER server1_fdw INTO public_fdw;', r.schemaname);
+  END LOOP;
+END $$;
+
 ```
 
 3. Performance improvements:
@@ -44,7 +57,31 @@ ALTER SERVER server1_fdw OPTIONS (ADD use_remote_estimate 'true');
 -- For every table in public_fdw schema
 ALTER FOREIGN TABLE public_fdw.<table> OPTIONS (add fetch_size '10000');
 ALTER FOREIGN TABLE public_fdw.<table> OPTIONS (add batch_size '10000');
+
+--OR
+
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT c.relname AS table_name
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public_fdw' AND c.relkind = 'f'
+    LOOP
+        EXECUTE format(
+            'ALTER FOREIGN TABLE public_fdw.%I OPTIONS (add fetch_size ''10000'');',
+            r.table_name
+        );
+    END LOOP;
+END $$;
+
+-- Do the analyze for all the tables in public_fdw schema
 ANALYZE public_fdw.<table>;
+
+-- OR Use vacuumdb client to speedup this task.
+
 ```
 
 4. Create additional tables:
