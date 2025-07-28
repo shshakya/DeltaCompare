@@ -100,6 +100,7 @@ ANALYZE public_fdw.<table>;
 3. Install dependencies:
 
 ```bash
+cd DeltaCompare
 pip3 install -r requirements.txt
 
 ```
