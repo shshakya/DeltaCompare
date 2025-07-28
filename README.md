@@ -17,7 +17,7 @@
 ## PITR2
 
 1. Enable **Postgres FDW extension**
-   - Add POSTGRES_FDW to `azure.extensions` server parameter.
+   - Add POSTGRES_FDW to `azure.extensions` server parameter
 2. Execute the following scripts:
 
 ```sql
@@ -91,27 +91,39 @@ ANALYZE public_fdw.<table>;
 
 ---
 
-# Script
-
-
+# Setup VM to run the delta script
 
 1. Create a VM in the same region (**India Central**)
-2. Clone repository
-3. Install dependencies:
+2. Install Git
+```basg
+sudo apt install git -y
+```
+3. Clone repository
+4. Install dependencies:
 
 ```bash
 cd DeltaCompare
+
+# Update package list
+sudo apt update
+
+# Install Python 3 (already included in most systems, but this ensures it's there)
+sudo apt install python3 -y
+
+# Install pip (Python package manager)
+sudo apt install python3-pip -y
+
 pip3 install -r requirements.txt
 
 ```
 
-3. Ensure the VM can connect to both PostgreSQL servers  
-4. Move code from GitHub repo to VM  
-5. Execute the script:
+5. Ensure the VM can connect to both PostgreSQL servers  
+6. Move code from GitHub repo to VM  
+7. Execute the script:
 
 ```bash
 python3 delta_compare_direct_push.py
 ```
 
-6. The script generates a log file named `datadeltalog_*` in the execution folder  
-7. Once completed, delta records will be available in the `event_hub`  
+8. The script generates a log file named `datadeltalog_*` in the execution folder  
+9. Once completed, delta records will be available in the `event_hub`  
