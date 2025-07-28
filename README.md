@@ -20,6 +20,7 @@
 2. Execute the following scripts:
 
 ```sql
+-- Add POSTGRES_FDW to `azure.extensions` server parameter.
 -- Create schema
 CREATE SCHEMA public_fdw;
 
