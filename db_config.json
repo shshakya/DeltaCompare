@@ -1,0 +1,6 @@
+{
+  "db1": "postgresql://username1:password1@host1:port1/database1",
+  "db2": "postgresql://username2:password2@host2:port2/database2",
+  "event_hub_connection_str": "Endpoint=sb://your-eventhub-namespace.servicebus.windows.net/;SharedAccessKeyName=your-key-name;SharedAccessKey=your-key-value;EntityPath=your-eventhub-name",
+  "event_hub_name": "your-eventhub-name"
+}
