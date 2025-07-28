@@ -99,6 +99,11 @@ ANALYZE public_fdw.<table>;
 sudo apt install git -y
 ```
 3. Clone repository
+
+```bash
+git clone https://github.com/shshakya/DeltaCompare.git
+```
+
 4. Install dependencies:
 
 ```bash
