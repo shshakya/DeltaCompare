@@ -18,7 +18,7 @@
 
 1. Enable **Postgres FDW extension**
    - Add POSTGRES_FDW to `azure.extensions` server parameter.
-3. Execute the following scripts:
+2. Execute the following scripts:
 
 ```sql
 -- Create schema
@@ -108,7 +108,7 @@ pip3 install -r requirements.txt
 5. Execute the script:
 
 ```bash
-python3 data_delta.py
+python3 delta_compare_direct_push.py
 ```
 
 6. The script generates a log file named `datadeltalog_*` in the execution folder  
