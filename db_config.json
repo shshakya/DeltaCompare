@@ -1,6 +1,13 @@
 {
-  "db1": "postgresql://username1:password1@host1:port1/database1",
-  "db2": "postgresql://username2:password2@host2:port2/database2",
-  "event_hub_connection_str": "Endpoint=sb://your-eventhub-namespace.servicebus.windows.net/;SharedAccessKeyName=your-key-name;SharedAccessKey=your-key-value;EntityPath=your-eventhub-name",
-  "event_hub_name": "your-eventhub-name"
+    "db1": "postgresql://<username>:<password>@<host>:5432/db1",
+    "db2": "postgresql://<username>:<password>@<host>:5432/db1",
+    "event_hub_connection_str": "<event_hub_connection_string>",
+    "event_hub_name": "<event_hub_name>",
+    "fdw_db": "db1",
+    "fdw_host": "<fdw_host>",
+    "fdw_password": "<fdw_password>",
+    "fdw_port": "5432",
+    "fdw_servername": "server1_fdw",
+    "fdw_user": "<fdw_user>",
+    "max_workers": 16
 }
