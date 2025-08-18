@@ -186,7 +186,7 @@ def build_payload(table_name, before, after, op_type,schema):
                 "version": "3.2.0.Final",
                 "connector": "postgresql",
                 "name": "PostgreSQL_server",
-                "db": "postgres",
+                "db": fdw_db,
                 "schema": schema,
                 "table": table_name
             },
