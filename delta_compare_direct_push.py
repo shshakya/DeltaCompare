@@ -749,19 +749,29 @@ def send_to_eventhub(
         payload = json.dumps(payload_obj, ensure_ascii=False)
         # 🧪 Print payload for testing
         #print(f"\n--- Payload for table '{table}' ---\n{payload}\n")
-
         try:
             batch.add(EventData(payload))
-            items_in_batch += 1
         except ValueError:
-            # batch full → flush & retry
-            _flush()
+            producer.send_batch(batch)
+            batch = producer.create_batch()
             batch.add(EventData(payload))
-            items_in_batch = 1
 
-    _flush()
-    producer.close()
-    logging.info(f"{schema}.{table}: {len(df)} rows sent to Event Hub.")
+        if len(batch) > 0:
+            producer.send_batch(batch)
+        producer.close()
+        logging.info(f"{schema}.{table}:{len(df)} rows sent to Event Hub.")
+        #try:
+         #   batch.add(EventData(payload))
+          #  items_in_batch += 1
+        #except ValueError:
+            # batch full → flush & retry
+         #   _flush()
+          #  batch.add(EventData(payload))
+           # items_in_batch = 1
+
+   # _flush()
+    #producer.close()
+    #logging.info(f"{schema}.{table}: {len(df)} rows sent to Event Hub.")
 
 
 # ------------------------------------------------------------------------------
