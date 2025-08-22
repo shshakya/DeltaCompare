@@ -527,15 +527,16 @@ def build_payload(
         source["snapshot"] = snapshot_flag
 
     return {
+     "payload": {
             "before": norm_before,
             "after": norm_after,
             "ts_ms": STATIC_TS_MS,
             "ts_us": STATIC_TS_US,
             "ts_ns": STATIC_TS_NS,
             "source": source,
-            "op": op_type,
-    }
-
+            "op": op_type
+             }
+     }
 
 # ------------------------------------------------------------------------------
 # Delta SQL builders (xml safely cast to text where needed)
@@ -751,28 +752,16 @@ def send_to_eventhub(
         #print(f"\n--- Payload for table '{table}' ---\n{payload}\n")
         try:
             batch.add(EventData(payload))
+            items_in_batch += 1
         except ValueError:
-            producer.send_batch(batch)
-            batch = producer.create_batch()
+            # Batch full → flush & retry
+            _flush()
             batch.add(EventData(payload))
+            items_in_batch = 1
 
-        if len(batch) > 0:
-            producer.send_batch(batch)
-        producer.close()
-        logging.info(f"{schema}.{table}:{len(df)} rows sent to Event Hub.")
-        #try:
-         #   batch.add(EventData(payload))
-          #  items_in_batch += 1
-        #except ValueError:
-            # batch full → flush & retry
-         #   _flush()
-          #  batch.add(EventData(payload))
-           # items_in_batch = 1
-
-   # _flush()
-    #producer.close()
-    #logging.info(f"{schema}.{table}: {len(df)} rows sent to Event Hub.")
-
+    _flush()
+    producer.close()
+    logging.info(f"{schema}.{table}: {len(df)} rows sent to Event Hub.")
 
 # ------------------------------------------------------------------------------
 # Orchestrator for a single table
