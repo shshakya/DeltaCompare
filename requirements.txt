@@ -1,6 +1,6 @@
-pandas
-SQLAlchemy>=2
-psycopg2-binary
-azure-eventhub>=5.11.3
-backports.zoneinfo; python_version<"3.9"
+psycopg2-binary>=2.9.9
+SQLAlchemy>=2.0.0
+pandas>=2.0.0
+azure-eventhub>=5.11.0
+backports.zoneinfo; python_version < '3.9'
 tzdata
