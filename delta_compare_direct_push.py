@@ -160,17 +160,28 @@ def setup_fdw_and_confirm(
 # ------------------------------------------------------------------------------
 # Metadata helpers
 # ------------------------------------------------------------------------------
-def get_user_tables(engine) -> List[Tuple[str, str]]:
-    """Return [(table_name, schema_name), ...] for publication tables."""
-    sql = """
+def get_user_tables(engine, publications: List[str]) -> List[Tuple[str, str]]:
+    """
+    Return [(table_name, schema_name), ...] for tables in specified publications.
+    If publications list is empty, return empty list (no fallback).
+    """
+    if not publications:
+        logging.warning("No publication names provided in config. Skipping comparison.")
+        return []
+
+    placeholders = ", ".join([f"%s" for _ in publications])
+    sql = f"""
         SELECT tablename AS full_table_name, schemaname
         FROM pg_catalog.pg_tables
         WHERE (schemaname, tablename) IN (
-          SELECT schemaname, tablename FROM pg_publication_tables
+          SELECT schemaname, tablename
+          FROM pg_publication_tables
+          WHERE pubname IN ({placeholders})
         );
     """
-    df = pd.read_sql(sql, engine)
+    df = pd.read_sql(sql, engine, params=publications)
     return list(zip(df["full_table_name"], df["schemaname"]))
+
 
 
 def get_primary_key_columns(schema: str, table: str) -> List[str]:
@@ -809,7 +820,9 @@ if __name__ == "__main__":
 
     # 2) Get tables
     try:
-        tables = get_user_tables(db2_engine)
+        publication_names = config.get("publication_names", [])
+        tables = get_user_tables(db2_engine, publication_names)
+
         results: Dict[Tuple[str, str], str] = {}
     except Exception as e:
         logging.error(f"Failed to fetch tables: {e}")
