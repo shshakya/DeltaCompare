@@ -33,18 +33,18 @@ with open("db_config.json") as config_file:
 
 db1_engine = create_engine(
     config["db1"],
-    pool_size=20,
-    max_overflow=16,
-    pool_timeout=60,
+    pool_size=80,
+    max_overflow=40,
+    pool_timeout=120,
     pool_recycle=1800,
     pool_pre_ping=True,
     pool_use_lifo=True,
 )
 db2_engine = create_engine(
     config["db2"],
-    pool_size=20,
-    max_overflow=16,
-    pool_timeout=60,
+    pool_size=80,
+    max_overflow=40,
+    pool_timeout=120,
     pool_recycle=1800,
     pool_pre_ping=True,
     pool_use_lifo=True,
