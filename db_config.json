@@ -10,5 +10,6 @@
     "fdw_servername": "server1_fdw",
     "fdw_user": "<fdw_user>",
     "max_workers": 16,
-    "static_timestamp": "2025-08-22T14:00:00Z"
+    "static_timestamp": "2025-08-22T14:00:00Z",
+    "publication_names": ["pub1", "pub2"]
 }
