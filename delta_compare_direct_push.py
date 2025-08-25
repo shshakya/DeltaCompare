@@ -660,7 +660,7 @@ def _is_distinct_expr(col: str, typemap: Dict[str, str]) -> str:
     """
     # typemap contains pg_type.typname (lowercase) keyed by column name
     t = (typemap.get(col, "") or "").lower()
-    qcol = f'"{col.replace("\"", "\"\"")}"'
+    qcol = '"' + col.replace('"', '""') + '"'
     if t == "xml":
         # Cast both sides to text for comparison
         return f"l.{qcol}::text IS DISTINCT FROM r.{qcol}::text"
