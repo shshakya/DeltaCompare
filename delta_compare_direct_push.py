@@ -538,47 +538,59 @@ def build_payload(
              }
      }
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# SQL Builder Helpers: Chunked jsonb_build_object to avoid TooManyArguments
+# --------------------------------------------------------------------------
+
+def _chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+def _jsonb_build_object_chunks(alias, cols, typemap):
+    """
+    Build a concatenated jsonb_build_object() expression for a list of columns,
+    chunked to avoid PostgreSQL's 100-argument limit.
+    """
+    chunk_exprs = []
+    for chunk in _chunks(cols, 100):
+        pairs = []
+        for c in chunk:
+            typ = typemap.get(c, 'text')
+            base = f'{alias}."{c}"'
+            if typ == "xml":
+                base = f"{base}::text"
+            pairs.append(f"'{c}', to_jsonb({base})")
+        chunk_exprs.append(f"jsonb_build_object({', '.join(pairs)})")
+    return " || ".join(chunk_exprs) if chunk_exprs else "to_jsonb(NULL)"
+
+# --------------------------------------------------------------------------
 # Delta SQL builders (xml safely cast to text where needed)
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+
 def build_fdw_delta_query_keys_only(
-    schema_local: str, schema_remote: str, table_name: str, key_cols: List[str], col_types: Dict[str, str]
+    schema_local: str, schema_remote: str, table_name: str, key_cols: list, col_types: dict
 ) -> str:
-    def _qident(name: str) -> str:
+    def qident(name: str) -> str:
         return '"' + name.replace('"', '""') + '"'
-
-    def _value_expr(alias: str, col: str, typname: str) -> str:
-        base = f"{alias}.{_qident(col)}"
-        if typname == "xml":
-            return f"{base}::text"
-        return base
-
-    def _values_block(alias: str, cols: List[str], typemap: Dict[str, str]) -> str:
-        if not cols:
-            return "VALUES ('__empty__', to_jsonb(NULL))"
-        pairs = [f"('{c}', to_jsonb({_value_expr(alias, c, typemap.get(c, 'text'))}))" for c in cols]
-        return "VALUES " + ", ".join(pairs)
 
     non_keys = [c for c in col_types.keys() if c not in key_cols]
     json_cols = key_cols + non_keys
 
-    values_local = _values_block("l", json_cols, col_types)
-    values_remote = _values_block("r", json_cols, col_types)
+    obj_local = _jsonb_build_object_chunks("l", json_cols, col_types)
+    obj_remote = _jsonb_build_object_chunks("r", json_cols, col_types)
 
-    obj_local = f"(SELECT jsonb_object_agg(k, v) FROM ({values_local})  AS kv(k, v))"
-    obj_remote = f"(SELECT jsonb_object_agg(k, v) FROM ({values_remote}) AS kv(k, v))"
-
-    pk_join = " AND ".join([f"l.{_qident(c)} = r.{_qident(c)}" for c in key_cols]) or "FALSE"
-    is_null_remote = " AND ".join([f"r.{_qident(c)} IS NULL" for c in key_cols]) or "FALSE"
-    is_null_local = " AND ".join([f"l.{_qident(c)} IS NULL" for c in key_cols]) or "FALSE"
+    pk_join = " AND ".join([f"l.{qident(c)} = r.{qident(c)}" for c in key_cols]) or "FALSE"
+    is_null_remote = " AND ".join([f"r.{qident(c)} IS NULL" for c in key_cols]) or "FALSE"
+    is_null_local = " AND ".join([f"l.{qident(c)} IS NULL" for c in key_cols]) or "FALSE"
 
     return f"""
         -- INSERTS (local only)
         SELECT 'c'::text AS op,
                NULL::jsonb AS before,
                {obj_local} AS after
-        FROM {_qident(schema_local)}.{_qident(table_name)} l
-        LEFT JOIN {_qident(schema_remote)}.{_qident(table_name)} r ON {pk_join}
+        FROM {qident(schema_local)}.{qident(table_name)} l
+        LEFT JOIN {qident(schema_remote)}.{qident(table_name)} r ON {pk_join}
         WHERE {is_null_remote}
 
         UNION ALL
@@ -587,46 +599,32 @@ def build_fdw_delta_query_keys_only(
         SELECT 'd'::text AS op,
                {obj_remote} AS before,
                NULL::jsonb AS after
-        FROM {_qident(schema_remote)}.{_qident(table_name)} r
-        LEFT JOIN {_qident(schema_local)}.{_qident(table_name)} l ON {pk_join}
+        FROM {qident(schema_remote)}.{qident(table_name)} r
+        LEFT JOIN {qident(schema_local)}.{qident(table_name)} l ON {pk_join}
         WHERE {is_null_local}
     """
 
-
 def build_fdw_delta_query_no_key(
-    schema_local: str, schema_remote: str, table_name: str, col_types: Dict[str, str]
+    schema_local: str, schema_remote: str, table_name: str, col_types: dict
 ) -> str:
-    def _qident(name: str) -> str:
+    def qident(name: str) -> str:
         return '"' + name.replace('"', '""') + '"'
 
-    def _value_expr(alias: str, col: str, typname: str) -> str:
-        base = f"{alias}.{_qident(col)}"
-        return f"{base}::text" if typname == "xml" else base
-
-    def _values_block(alias: str, cols: List[str], typemap: Dict[str, str]) -> str:
-        if not cols:
-            return "VALUES ('__empty__', to_jsonb(NULL))"
-        pairs = [f"('{c}', to_jsonb({_value_expr(alias, c, typemap.get(c, 'text'))}))" for c in cols]
-        return "VALUES " + ", ".join(pairs)
-
     all_cols = list(col_types.keys())
-    values_local = _values_block("l", all_cols, col_types)
-    values_remote = _values_block("r", all_cols, col_types)
-
-    obj_local = f"(SELECT jsonb_object_agg(k, v) FROM ({values_local})  AS kv(k, v))"
-    obj_remote = f"(SELECT jsonb_object_agg(k, v) FROM ({values_remote}) AS kv(k, v))"
+    obj_local = _jsonb_build_object_chunks("l", all_cols, col_types)
+    obj_remote = _jsonb_build_object_chunks("r", all_cols, col_types)
 
     return f"""
         -- INSERTS (local rows not in remote)
         SELECT 'c'::text AS op,
                NULL::jsonb AS before,
                {obj_local} AS after
-        FROM {_qident(schema_local)}.{_qident(table_name)} l
+        FROM {qident(schema_local)}.{qident(table_name)} l
         EXCEPT ALL
         SELECT 'c'::text AS op,
                NULL::jsonb AS before,
                {obj_remote} AS after
-        FROM {_qident(schema_remote)}.{_qident(table_name)} r
+        FROM {qident(schema_remote)}.{qident(table_name)} r
 
         UNION ALL
 
@@ -634,46 +632,31 @@ def build_fdw_delta_query_no_key(
         SELECT 'd'::text AS op,
                {obj_remote} AS before,
                NULL::jsonb AS after
-        FROM {_qident(schema_remote)}.{_qident(table_name)} r
+        FROM {qident(schema_remote)}.{qident(table_name)} r
         EXCEPT ALL
         SELECT 'd'::text AS op,
                {obj_local} AS before,
                NULL::jsonb AS after
-        FROM {_qident(schema_local)}.{_qident(table_name)} l
+        FROM {qident(schema_local)}.{qident(table_name)} l
     """
-
 
 def build_fdw_delta_query(
     schema_local: str,
     schema_remote: str,
     table_name: str,
-    pk_cols: List[str],
-    compare_cols: List[str],
-    col_types: Dict[str, str],
+    pk_cols: list,
+    compare_cols: list,
+    col_types: dict,
 ) -> str:
     def qident(name: str) -> str:
         return '"' + name.replace('"', '""') + '"'
 
-    def value_expr(alias: str, col: str) -> str:
-        base = f"{alias}.{qident(col)}"
-        typ = col_types.get(col)
-        return f"{base}::text" if typ == "xml" else base
-
-    def values_block(alias: str, cols: List[str]) -> str:
-        if not cols:
-            return "VALUES ('__empty__', to_jsonb(NULL))"
-        pairs = [f"('{c}', to_jsonb({value_expr(alias, c)}))" for c in cols]
-        return "VALUES " + ", ".join(pairs)
-
     json_cols = pk_cols + compare_cols
-    values_local = values_block("l", json_cols)
-    values_remote = values_block("r", json_cols)
-
-    obj_local = f"(SELECT jsonb_object_agg(k, v) FROM ({values_local})  AS kv(k, v))"
-    obj_remote = f"(SELECT jsonb_object_agg(k, v) FROM ({values_remote}) AS kv(k, v))"
+    obj_local = _jsonb_build_object_chunks("l", json_cols, col_types)
+    obj_remote = _jsonb_build_object_chunks("r", json_cols, col_types)
 
     pk_join = " AND ".join([f"l.{qident(c)} = r.{qident(c)}" for c in pk_cols]) or "FALSE"
-    is_diff_parts = [f"{value_expr('l', c)} IS DISTINCT FROM {value_expr('r', c)}" for c in compare_cols]
+    is_diff_parts = [f"l.{qident(c)} IS DISTINCT FROM r.{qident(c)}" for c in compare_cols]
     is_diff = " OR ".join(is_diff_parts) if is_diff_parts else "FALSE"
     is_null_remote = " AND ".join([f"r.{qident(c)} IS NULL" for c in pk_cols]) or "FALSE"
     is_null_local = " AND ".join([f"l.{qident(c)} IS NULL" for c in pk_cols]) or "FALSE"
@@ -704,8 +687,6 @@ def build_fdw_delta_query(
           WHERE {is_null_local}
         ) AS delta;
     """
-
-
 # ------------------------------------------------------------------------------
 # Event Hubs sender (batch-safe)
 # ------------------------------------------------------------------------------
