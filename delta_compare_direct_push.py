@@ -651,6 +651,22 @@ def build_fdw_delta_query_no_key(
         FROM {qident(schema_local)}.{qident(table_name)} l
     """
 
+## helper function for handling xml columns.
+
+def _is_distinct_expr(col: str, typemap: Dict[str, str]) -> str:
+    """
+    Returns an IS DISTINCT FROM expression for a column, with safe casts for types
+    (notably xml) that don't have = or IS DISTINCT FROM operators.
+    """
+    # typemap contains pg_type.typname (lowercase) keyed by column name
+    t = (typemap.get(col, "") or "").lower()
+    qcol = f'"{col.replace("\"", "\"\"")}"'
+    if t == "xml":
+        # Cast both sides to text for comparison
+        return f"l.{qcol}::text IS DISTINCT FROM r.{qcol}::text"
+    # Extend here if you later hit other types without = (e.g., custom domains)
+    return f"l.{qcol} IS DISTINCT FROM r.{qcol}"
+
 def build_fdw_delta_query(
     schema_local: str,
     schema_remote: str,
@@ -667,7 +683,7 @@ def build_fdw_delta_query(
     obj_remote = _jsonb_build_object_chunks("r", json_cols, col_types)
 
     pk_join = " AND ".join([f"l.{qident(c)} = r.{qident(c)}" for c in pk_cols]) or "FALSE"
-    is_diff_parts = [f"l.{qident(c)} IS DISTINCT FROM r.{qident(c)}" for c in compare_cols]
+    is_diff_parts = [_is_distinct_expr(c, col_types) for c in compare_cols]
     is_diff = " OR ".join(is_diff_parts) if is_diff_parts else "FALSE"
     is_null_remote = " AND ".join([f"r.{qident(c)} IS NULL" for c in pk_cols]) or "FALSE"
     is_null_local = " AND ".join([f"l.{qident(c)} IS NULL" for c in pk_cols]) or "FALSE"
