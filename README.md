@@ -190,7 +190,7 @@ Each record is a Debezium-like envelope:
 ## Checklist
 
 - [ ] PITR1 & PITR2 created  
-- [ ] VM connectivity verified  
+- [ ] VM to PostgreSQL & EventHub connectivity verified  
 - [ ] `setup_fdw_for_publications.sql` deployed on PITR2  
 - [ ] `db_config.json` configured  
 - [ ] Dependencies installed  
