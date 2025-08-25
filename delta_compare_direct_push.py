@@ -179,7 +179,7 @@ def get_user_tables(engine, publications: List[str]) -> List[Tuple[str, str]]:
           WHERE pubname IN ({placeholders})
         );
     """
-    df = pd.read_sql(sql, engine, params=publications)
+    df = pd.read_sql(sql, engine, params=tuple(publications))
     return list(zip(df["full_table_name"], df["schemaname"]))
 
 
