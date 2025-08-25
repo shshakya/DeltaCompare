@@ -564,7 +564,7 @@ def _jsonb_build_object_chunks(alias, cols, typemap):
     chunked to avoid PostgreSQL's 100-argument limit.
     """
     chunk_exprs = []
-    for chunk in _chunks(cols, 100):
+    for chunk in _chunks(cols, 50):
         pairs = []
         for c in chunk:
             typ = typemap.get(c, 'text')
