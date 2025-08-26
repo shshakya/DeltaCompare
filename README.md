@@ -1,134 +1,200 @@
 # DeltaCompare
 
-# Solution
+## Overview
 
-1. Create a PITR (**PITR1**) at the time when the replication slot is lost  
-2. Create another PITR (**PITR2**) at the time when the replication slot is added back  
-3. Use **Postgres FDW** and **Python scripts** to get the delta between **PITR2** & **PITR1**  
-4. The script will identify **inserts**, **deletes**, and **updates** in the interval and store them in a **Event Hub**  
-   - Insert: row exists in PITR2 but not in PITR1
-   - Delete: row exists in PITR1 but not in PTR2
-   - Update: row exists in both but has differences
+**DeltaCompare** generates a **change feed** (inserts, updates, deletes) between two PostgreSQL points in time—**PITR1** (older) and **PITR2** (newer)—and streams the result to **Azure Event Hubs** in a **Debezium-compatible** envelope.
+
+Typical use case: a logical replication slot gets lost and later recreated. We compare data between the two PITRs to backfill the missed events.
 
 ---
 
-# Setup
+## How It Works
 
-## PITR2
-
-1. Enable **Postgres FDW extension**
-   - Add POSTGRES_FDW to `azure.extensions` server parameter
-2. Execute the following scripts:
-
-```sql
--- Create schema
-CREATE SCHEMA public_fdw;
-
--- Enable FDW extension
-CREATE EXTENSION IF NOT EXISTS postgres_fdw;
-
--- Create foreign server
-CREATE SERVER server1_fdw FOREIGN DATA WRAPPER postgres_fdw 
-OPTIONS (host '<pitr1>.postgres.database.azure.com', port '5432', dbname '<dbname>');
-
--- Create user mapping
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1_fdw 
-OPTIONS (user '<username>', password '<password>');
-
--- Import foreign schema (repeat for all PITR1 schemas)
-IMPORT FOREIGN SCHEMA <schema> FROM SERVER server1_fdw INTO public_fdw;
-
--- OR
-
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  FOR r IN SELECT DISTINCT schemaname FROM pg_publication_tables
-  LOOP
-    EXECUTE format('IMPORT FOREIGN SCHEMA %I FROM SERVER server1_fdw INTO public_fdw;', r.schemaname);
-  END LOOP;
-END $$;
-
-```
-
-3. Performance improvements:
-
-```sql
--- Enable remote estimate
-ALTER SERVER server1_fdw OPTIONS (ADD use_remote_estimate 'true');
-
--- For every table in public_fdw schema
-ALTER FOREIGN TABLE public_fdw.<table> OPTIONS (add fetch_size '10000');
-ALTER FOREIGN TABLE public_fdw.<table> OPTIONS (add batch_size '10000');
-
---OR
-
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN
-        SELECT c.relname AS table_name
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public_fdw' AND c.relkind = 'f'
-    LOOP
-        EXECUTE format(
-            'ALTER FOREIGN TABLE public_fdw.%I OPTIONS (add fetch_size ''10000'');',
-            r.table_name
-        );
-    END LOOP;
-END $$;
-
--- Do the analyze for all the tables in public_fdw schema
-ANALYZE public_fdw.<table>;
-
--- OR Use vacuumdb client to speedup this task.
-
-```
-
+1. Create a **PITR** at the time the replication slot was **lost** (**PITR1**).  
+2. Create another **PITR** at the time the slot was **restored** (**PITR2**).  
+3. On **PITR2**, the script:
+   - Performs a **one-time FDW setup** (to connect to PITR1) using the stored procedure `public.setup_fdw_for_publications(...)`.
+   - Discovers tables to compare from `pg_publication_tables` (via `publication_names` in config).
+   - Builds **delta SQL** per table (keyed & keyless cases, XML-safe comparisons, chunked JSONB).
+   - Streams **inserts**, **updates**, and **deletes** to **Azure Event Hub**:
+     - **Insert**: Row exists in **PITR2** but not in **PITR1**
+     - **Delete**: Row exists in **PITR1** but not in **PITR2**
+     - **Update**: Row exists in both but differs in one or more non-key columns
 
 ---
 
-# Setup VM to run the delta script
+## What’s New (Aug 2025)
 
-1. Create a VM in the same region (**India Central**)
-2. Install Git
-```basg
-sudo apt install git -y
+- ✅ Automated FDW setup via `CALL public.setup_fdw_for_publications(...)` with a confirmation prompt
+- ✅ Publication-driven table discovery (`publication_names` in `db_config.json`)
+- ✅ Debezium-compatible payloads with `ts_ms`, `ts_us`, `ts_ns`, and adaptive timestamp handling
+- ✅ Timezone-aware normalization (uses DB `TimeZone` for `timestamp` without time zone)
+- ✅ XML-safe comparisons (casts to `text` where needed)
+- ✅ Chunked `jsonb_build_object` to avoid Postgres’ 100-argument limit
+- ✅ Parallel execution with configurable `max_workers`
+- ✅ Direct push to Azure Event Hubs with batching
+- ✅ Improved logging and final summary report
+
+---
+
+## Prerequisites
+
+- **PostgreSQL** (Azure Database for PostgreSQL Flexible Server or self-managed)
+  - Ability to create extensions, foreign servers, user mappings, and import foreign schemas
+  - Network reachability from **PITR2** to **PITR1**
+- **Azure Event Hubs** namespace and event hub
+- **VM** (Linux recommended) in the **same region** as your databases (e.g., **Central India**) for low latency
+- **Python 3.9+**
+
+---
+
+## Database Setup (Automated)
+
+The script will execute the following stored procedure on **PITR2**:
+
+```sql
+CALL public.setup_fdw_for_publications(
+  :server, :user, :dbname, :pwd, :host, :port, :p_return
+);
 ```
-3. Clone repository
 
-```bash
-git clone https://github.com/shshakya/DeltaCompare.git
+**Important:**  
+Before running the script, deploy the helper SQL file `sql/setup_fdw_for_publications.sql` on **PITR2**.  
+This file creates the stored procedure `public.setup_fdw_for_publications` which automates:
+- Creating the FDW extension
+- Creating the foreign server and user mapping
+- Importing foreign schemas for all tables in the specified publications
+
+---
+
+## VM Setup (to run the script)
+
+1. Create a VM in the **same region** as your PostgreSQL servers (e.g., **Central India**).
+2. Install Git:
+   ```bash
+   sudo apt update
+   sudo apt install -y git
+   ```
+3. Clone the repository:
+   ```bash
+   git clone https://github.com/shshakya/DeltaCompare.git
+   cd DeltaCompare
+   ```
+4. Install Python and dependencies:
+   ```bash
+   sudo apt install -y python3 python3-pip
+   pip3 install -r requirements.txt
+   ```
+5. Ensure the VM can reach **both** PostgreSQL instances (PITR1 and PITR2).  
+   - Open firewalls.
+   - Add private endpoints or allowlisted IPs as needed.
+   - For Azure DB, ensure `sslmode=require` in your connection strings.
+6. Create and populate `db_config.json`.
+
+---
+
+## Configuration
+
+Create `db_config.json` in the repo root:
+
+```json
+{
+  "db1": "postgresql+psycopg2://<user>:<password>@<pitr1-host>:5432/<db>?sslmode=require",
+  "db2": "postgresql+psycopg2://<user>:<password>@<pitr2-host>:5432/<db>?sslmode=require",
+
+  "event_hub_connection_str": "Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<name>;SharedAccessKey=<key>",
+  "event_hub_name": "<event-hub-name>",
+
+  "fdw_servername": "server1_fdw",
+  "fdw_user": "<pitr1-user>",
+  "fdw_db": "<db>",
+  "fdw_password": "<pitr1-password>",
+  "fdw_host": "<pitr1-host>",
+  "fdw_port": "5432",
+
+  "publication_names": ["pub_orders", "pub_customers"],
+
+  "max_workers": 12,
+
+  "static_timestamp": "2025-08-22T14:00:00Z"
+}
 ```
 
-4. Install dependencies:
+---
 
-```bash
-cd DeltaCompare
-
-# Update package list
-sudo apt update
-
-# Install Python 3 (already included in most systems, but this ensures it's there)
-sudo apt install python3 -y
-
-# Install pip (Python package manager)
-sudo apt install python3-pip -y
-
-pip3 install -r requirements.txt
-
-```
-
-5. Ensure the VM can connect to both PostgreSQL servers  
-6. Set PostgreSQL username/passwords and eventhub connections strings in `db_config.json` file
-7. Execute the script:
+## Run
 
 ```bash
 python3 delta_compare_direct_push.py
 ```
 
-8. The script generates a log file named `datadeltalog_*` in the execution folder  
-9. Once completed, delta records will be available in the `event_hub`  
+- The script:
+  1. Performs FDW setup via stored procedure (and asks to continue).
+  2. Fetches tables from `pg_publication_tables` for the publications you listed.
+  3. Detects DB `TimeZone` to interpret naive `timestamp` values correctly.
+  4. Runs comparisons in parallel (threads = `max_workers`).
+  5. Pushes deltas to Event Hub (batched).
+  6. Writes logs to `datadeltalog_YYYYMMDD_HHMMSS.log`.
+
+---
+
+## Output Format (Event Hub Payload)
+
+Each record is a Debezium-like envelope:
+
+```json
+{
+  "payload": {
+    "before": { /* normalized row for 'd' or 'u' */ },
+    "after":  { /* normalized row for 'c' or 'u' */ },
+    "ts_ms":  1724335200000,
+    "ts_us":  "1724335200000000",
+    "ts_ns":  "1724335200000000000",
+    "source": {
+      "ts_ms": 1724335200000,
+      "ts_us": "1724335200000000",
+      "ts_ns": "1724335200000000000",
+      "version": "3.2.0.Final",
+      "connector": "postgresql",
+      "name": "PostgreSQL_server",
+      "db": "<db>",
+      "schema": "<schema>",
+      "table": "<table>"
+    },
+    "op": "c" | "u" | "d"
+  }
+}
+```
+
+---
+
+## Performance & Sizing
+
+- **Threads**: Start with `max_workers = 8–16`.
+- **VM**: 16 vCPUs / 64 GB RAM (Azure `D16s_v5` or `E16ds_v5`).
+- **Network**: Same region, 10 Gbps NIC.
+- **FDW options**: `use_remote_estimate=true`, `fetch_size=batch_size=10000`.
+- **Stats**: `ANALYZE` FDW schemas after import.
+
+---
+
+## Troubleshooting
+
+- **FDW setup failed**: Ensure `public.setup_fdw_for_publications` exists on PITR2 and privileges are correct.
+- **Permission errors**: Use admin role or equivalent.
+- **Memory pressure**: Lower `max_workers` or split large tables.
+- **Event Hub throttling**: Increase partitions / throughput units.
+
+---
+
+## Checklist
+
+- [ ] PITR1 & PITR2 created  
+- [ ] VM to PostgreSQL & EventHub connectivity verified  
+- [ ] `setup_fdw_for_publications.sql` deployed on PITR2  
+- [ ] `db_config.json` configured  
+- [ ] Dependencies installed  
+- [ ] Script executed successfully  
+
+---
+```
