@@ -731,7 +731,7 @@ def send_to_eventhub(
         return
 
     producer = EventHubProducerClient.from_connection_string(
-        EVENT_HUB_CONNECTION_STR, eventhub_name=EVENT_HUB_NAME
+        EVENT_HUB_CONNECTION_STR, eventhub_name=EVENT_HUB_NAME, retry_total=8
     )
     batch = producer.create_batch()
     items_in_batch = 0
