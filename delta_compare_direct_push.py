@@ -52,6 +52,8 @@ db2_engine = create_engine(
 
 EVENT_HUB_CONNECTION_STR = config["event_hub_connection_str"]
 EVENT_HUB_NAME = config["event_hub_name"]
+EVENT_HUB_RETRY_TOTAL = config["event_hub_retry_total"]
+EVENT_HUB_BATCH_MAX_SIZE_IN_BYTES = config["event_hub_batch_max_size_in_bytes"]
 fdw_servername = config["fdw_servername"]
 fdw_user = config["fdw_user"]
 fdw_db = config["fdw_db"]
@@ -731,16 +733,16 @@ def send_to_eventhub(
         return
 
     producer = EventHubProducerClient.from_connection_string(
-        EVENT_HUB_CONNECTION_STR, eventhub_name=EVENT_HUB_NAME, retry_total=8
+        EVENT_HUB_CONNECTION_STR, eventhub_name=EVENT_HUB_NAME, retry_total=EVENT_HUB_RETRY_TOTAL
     )
-    batch = producer.create_batch()
+    batch = producer.create_batch(max_size_in_bytes=EVENT_HUB_BATCH_MAX_SIZE_IN_BYTES)
     items_in_batch = 0
 
     def _flush():
         nonlocal batch, items_in_batch
         if items_in_batch > 0:
             producer.send_batch(batch)
-            batch = producer.create_batch()
+            batch = producer.create_batch(max_size_in_bytes=EVENT_HUB_BATCH_MAX_SIZE_IN_BYTES)
             items_in_batch = 0
 
     for _, row in df.iterrows():
