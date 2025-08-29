@@ -171,7 +171,7 @@ Each record is a Debezium-like envelope:
 ## Performance & Sizing
 
 - **Threads**: Start with `max_workers = 8–16`.
-- **VM**: 16 vCPUs / 64 GB RAM (Azure `D16s_v5` or `E16ds_v5`).
+- **VM**: 64 vCPUs Memory Optimized (Azure `E64ds_v5`).
 - **Network**: Same region, 10 Gbps NIC.
 - **FDW options**: `use_remote_estimate=true`, `fetch_size=batch_size=10000`.
 - **Stats**: `ANALYZE` FDW schemas after import.
