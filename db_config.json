@@ -3,7 +3,6 @@
     "db2": "postgresql://<username>:<password>@<host>:5432/db1",
     "event_hub_connection_str": "<event_hub_connection_string>",
     "event_hub_name": "<event_hub_name>",
-    "event_hub_batch_max_size_in_bytes": 18874368,
     "event_hub_retry_total": 8,
     "fdw_db": "db1",
     "fdw_host": "<fdw_db1_host>",
