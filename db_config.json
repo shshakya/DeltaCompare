@@ -6,7 +6,7 @@
     "event_hub_batch_max_size_in_bytes": 18874368,
     "event_hub_retry_total": 8,
     "fdw_db": "db1",
-    "fdw_host": "<fdw_host>",
+    "fdw_host": "<fdw_db1_host>",
     "fdw_password": "<fdw_password>",
     "fdw_port": "5432",
     "fdw_servername": "server1_fdw",
