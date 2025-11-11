@@ -130,7 +130,7 @@ STATIC_TS_NS = str(STATIC_TS_MS * 1000000)
 # ------------------------------------------------------------------------------
 log_filename = f"datadeltalog_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.FileHandler(log_filename), logging.StreamHandler()],
 )
@@ -845,7 +845,7 @@ def send_to_eventhub(
         )
         payload = json.dumps(payload_obj, ensure_ascii=False)
         # 🧪 Print payload for testing
-        print(f"\n--- Payload for table '{table}' ---\n{payload}\n")
+        #print(f"\n--- Payload for table '{table}' ---\n{payload}\n")
         try:
             batch.add(EventData(payload))
             items_in_batch += 1
