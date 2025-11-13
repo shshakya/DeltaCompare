@@ -417,8 +417,15 @@ def _parse_ts_tz(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
 
-def _to_epoch_microseconds(dt_aware_utc: datetime) -> int:
-    return int(dt_aware_utc.timestamp() * 1_000_000)
+def _to_epoch_microseconds(dt_aw: datetime) -> int:
+    """
+    Accepts any timezone-aware datetime and returns epoch microseconds.
+    Python's .timestamp() converts to UTC internally.
+    """
+    if dt_aw.tzinfo is None:
+        raise TypeError("Expected timezone-aware datetime")
+    return int(dt_aw.timestamp() * 1_000_000)
+
 
 
 def _ensure_aware_utc_from_naive(dt_naive: datetime, assume_tz: str) -> datetime:
@@ -548,9 +555,13 @@ def debezium_adaptive_normalize_record(
                     # Optional: logging.debug("TIMESTAMP parse failed col=%s raw=%r", col, val)
                     continue
 
-                dt_utc = _ensure_aware_utc_from_naive(dt_naive, assume_tz)
-                micros = _to_epoch_microseconds(dt_utc)
+                #dt_utc = _ensure_aware_utc_from_naive(dt_naive, assume_tz)
+                #micros = _to_epoch_microseconds(dt_utc)
+                
+                dt_aw = dt_naive.replace(tzinfo=ZoneInfo(assume_tz))
+                micros = _to_epoch_microseconds(dt_aw)
 
+                #micros = _to_epoch_microseconds(dt_naive)
                 # Decide ms vs µs:
                 # - Use column's effective_scale when valid (0..6)
                 # - Otherwise fallback to observed fractional digits; default to 6 if none visible
@@ -872,11 +883,11 @@ def compare_table_fdw(table_name: str, schema_local: str, schema_remote: Optiona
         
         types_sorted = {k: col_types[k] for k in sorted(col_types)}
         scales_sorted = {k: col_scales[k] for k in sorted(col_scales)}
-        logging.info(
+        logging.debug(
             "Type map for %s.%s: %s",
             schema_local, table_name, json.dumps(types_sorted, ensure_ascii=False)
         )
-        logging.info(
+        logging.debug(
             "Scale map for %s.%s: %s",
             schema_local, table_name, json.dumps(scales_sorted, ensure_ascii=False)
         )
