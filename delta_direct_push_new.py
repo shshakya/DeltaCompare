@@ -558,7 +558,7 @@ def debezium_adaptive_normalize_record(
                 #dt_utc = _ensure_aware_utc_from_naive(dt_naive, assume_tz)
                 #micros = _to_epoch_microseconds(dt_utc)
                 
-                dt_aw = dt_naive.replace(tzinfo=ZoneInfo(assume_tz))
+                dt_aw = dt_naive.replace(tzinfo=timezone.utc)
                 micros = _to_epoch_microseconds(dt_aw)
 
                 #micros = _to_epoch_microseconds(dt_naive)
